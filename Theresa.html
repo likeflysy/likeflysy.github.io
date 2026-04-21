@@ -328,14 +328,14 @@
 
         <div class="log-area" id="logArea">
             <div id="msg0" class="log-line" style="opacity: 0;">检测到用户登入</div>
-            <div id="msg1" class="log-line" style="opacity: 0;">身份认证：No.??? Null</div>
-            <div id="msg2" class="log-line" style="opacity: 0;">欢迎登入系统，“Null”。</div>
+            <div id="msg1" class="log-line" style="opacity: 0;">身份认证：No.DWDB 文明的存续</div>
+            <div id="msg2" class="log-line" style="opacity: 0;">欢迎登入系统，您已通过项目：DWDB-文明的存续验证身份。</div>
             <div id="loaderContainer" class="loader-ascii" style="opacity: 0; transition: opacity 0.2s;">
                 <span>⟡ 授权载荷</span>
                 <span class="spin">\</span>
                 <span>验证中</span>
             </div>
-            <div id="msg3" class="log-line" style="opacity: 0;">未检测到用户权限组</div>
+            <div id="msg3" class="log-line" style="opacity: 0;">未检测到用户权限组，依照跨项目逻辑赋予权限。</div>
             <div id="msg4" class="log-line" style="opacity: 0;">超级用户权限已开放</div>
         </div>
 
@@ -453,24 +453,20 @@
         const allMsgs = [msg0, msg1, msg2, msg3, msg4];
         
         let darkModeActive = false;
-        let darkModeTimer = null;
         let extraQuestionDiv = null;
         let resetInProgress = false;
-        let audioControlBtn = null;      // 音频按钮元素
-        let bgAudio = null;              // 音频实例
-        let isAudioInitialized = false;  // 是否已经创建音频对象
+        let audioControlBtn = null;
+        let bgAudio = null;
         
         // 创建音频实例（不自动播放）
         function initAudio() {
             if (bgAudio) return bgAudio;
             try {
-                // 请确保 reveal.wav 文件存在于同目录下，可替换为实际音乐文件路径
                 bgAudio = new Audio('m_avg_desolate_loop.mp3');
-                bgAudio.loop = true;      // 循环播放
+                bgAudio.loop = true;
                 bgAudio.volume = 0.5;
-                // 监听播放错误
                 bgAudio.addEventListener('error', (e) => {
-                    console.warn('音频文件加载失败，请检查路径或文件格式。', e);
+                    console.warn('音频文件加载失败，请检查路径。', e);
                 });
                 return bgAudio;
             } catch (err) {
@@ -479,7 +475,7 @@
             }
         }
         
-        // 创建交互按钮 (位于log-area区域内，在msg4之后)
+        // 创建交互按钮 (仅负责音乐控制 + 触发黑暗主题)
         function createAudioButton() {
             if (audioControlBtn) return audioControlBtn;
             const btn = document.createElement('button');
@@ -487,7 +483,6 @@
             btn.innerHTML = '▶ 点击以继续>';
             btn.setAttribute('data-playing', 'false');
             
-            // 点击行为：激活音频并支持暂停/播放切换
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const audio = initAudio();
@@ -496,15 +491,15 @@
                     return;
                 }
                 const isPlaying = btn.getAttribute('data-playing') === 'true';
+                
+                // 1. 处理音乐播放/暂停
                 if (!isPlaying) {
-                    // 尝试播放
                     audio.play().then(() => {
                         btn.innerHTML = '⏸ 暂停音乐';
                         btn.setAttribute('data-playing', 'true');
                     }).catch(err => {
-                        console.warn('播放被阻止，请确保用户交互有效:', err);
+                        console.warn('播放被阻止:', err);
                         btn.innerHTML = '🔇 点击重试';
-                        // 短暂恢复文字提示
                         setTimeout(() => {
                             if (btn.getAttribute('data-playing') !== 'true') {
                                 btn.innerHTML = '▶ 点击以继续>';
@@ -512,10 +507,14 @@
                         }, 1200);
                     });
                 } else {
-                    // 暂停
                     audio.pause();
                     btn.innerHTML = '▶ 继续音乐';
                     btn.setAttribute('data-playing', 'false');
+                }
+                
+                // 2. 触发黑暗主题与文字显示 (仅第一次有效)
+                if (!darkModeActive && !resetInProgress) {
+                    turnToDarkTheme();
                 }
             });
             
@@ -523,21 +522,18 @@
             return btn;
         }
         
-        // 将按钮添加到终端区域 (放在log-area末尾，status-footer之前)
+        // 将按钮添加到 logArea 末尾
         function attachAudioButton() {
             if (!audioControlBtn || audioControlBtn.parentNode) return;
             const logArea = document.getElementById('logArea');
-            // 为了避免破坏现有布局，插入到log-area内部最后，但位于question-revelation之前（如果存在）
-            // 更好方式：追加在logArea末尾
             logArea.appendChild(audioControlBtn);
         }
         
-        // 移除音频按钮（重置时）
+        // 移除音频按钮并停止音乐
         function removeAudioButton() {
             if (audioControlBtn && audioControlBtn.parentNode) {
                 audioControlBtn.remove();
             }
-            // 不销毁audio对象，但停止播放
             if (bgAudio) {
                 bgAudio.pause();
                 bgAudio.currentTime = 0;
@@ -548,29 +544,7 @@
             }
         }
         
-        function clearTimeouts() {
-            activeTimeouts.forEach(t => clearTimeout(t));
-            activeTimeouts.length = 0;
-            if (darkModeTimer) {
-                clearTimeout(darkModeTimer);
-                darkModeTimer = null;
-            }
-        }
-        
-        function revertDarkTheme() {
-            if (extraQuestionDiv && extraQuestionDiv.parentNode) {
-                extraQuestionDiv.remove();
-                extraQuestionDiv = null;
-            }
-            document.body.classList.remove('dark-mode');
-            darkModeActive = false;
-            if (darkModeTimer) {
-                clearTimeout(darkModeTimer);
-                darkModeTimer = null;
-            }
-        }
-        
-        // 黑暗主题转变 (不自动播放音乐，仅视觉效果和文字)
+        // 黑暗主题转变 + 添加问题文字 (只执行一次)
         function turnToDarkTheme() {
             if (darkModeActive || resetInProgress) return;
             darkModeActive = true;
@@ -591,10 +565,8 @@
                 extraQuestionDiv.appendChild(lineDiv);
             });
             const logArea = document.getElementById('logArea');
-            // 确保按钮在文本之前或之后？ 为了美观，将问题文本置于按钮上方，但按钮已在logArea中，所以需要调整顺序
-            // 如果按钮存在，则将其移动到问题文本之后
+            // 确保按钮位于文字下方 (美观)
             if (audioControlBtn && audioControlBtn.parentNode === logArea) {
-                // 先移除再添加以保证顺序：文本在上，按钮在下
                 logArea.removeChild(audioControlBtn);
                 logArea.appendChild(extraQuestionDiv);
                 logArea.appendChild(audioControlBtn);
@@ -604,18 +576,28 @@
         }
         
         let activeTimeouts = [];
+        function clearTimeouts() {
+            activeTimeouts.forEach(t => clearTimeout(t));
+            activeTimeouts.length = 0;
+        }
+        
+        function revertDarkTheme() {
+            if (extraQuestionDiv && extraQuestionDiv.parentNode) {
+                extraQuestionDiv.remove();
+                extraQuestionDiv = null;
+            }
+            document.body.classList.remove('dark-mode');
+            darkModeActive = false;
+        }
         
         function fullResetAndRestart() {
             resetInProgress = true;
             clearTimeouts();
             revertDarkTheme();
-            // 移除按钮并停止音乐
-            removeAudioButton();
-            // 重置音频对象，以便重新开始（保留对象但停止）
+            removeAudioButton();      // 停止音乐并移除按钮
             if (bgAudio) {
                 bgAudio.pause();
                 bgAudio.currentTime = 0;
-                // 不清空，后续重新点击按钮会再次play
             }
             allMsgs.forEach(m => {
                 m.classList.remove('visible');
@@ -631,11 +613,7 @@
         
         function startAuthFlow() {
             clearTimeouts();
-            darkModeActive = false;
-            if (extraQuestionDiv && extraQuestionDiv.parentNode) extraQuestionDiv.remove();
-            extraQuestionDiv = null;
-            document.body.classList.remove('dark-mode');
-            
+            revertDarkTheme();
             allMsgs.forEach(m => {
                 m.classList.remove('visible');
                 m.style.opacity = '0';
@@ -673,18 +651,10 @@
                                 msg4.classList.add('visible');
                                 msg4.style.opacity = '1';
                                 
-                                // 超级用户权限已开放显示后，立即创建并附加音频按钮
+                                // “超级用户权限已开放” 显示后，立刻创建并显示音频按钮
                                 const btn = createAudioButton();
                                 attachAudioButton();
-                                
-                                // 2秒后触发黑暗主题转变
-                                darkModeTimer = setTimeout(() => {
-                                    if (!darkModeActive && !resetInProgress) {
-                                        turnToDarkTheme();
-                                    }
-                                    darkModeTimer = null;
-                                }, 2000);
-                                activeTimeouts.push(darkModeTimer);
+                                // 注意：不再自动触发黑暗主题，等待用户点击按钮
                                 
                             }, 2800));
                         }, 2000));
@@ -713,22 +683,7 @@
             fullResetAndRestart();
         });
         
-        console.log("[PRTS] 权限认证终端已启动 | 音频控制按钮已集成 | 点击按钮激活循环音乐");
-        
-        /**
-         * ========== 音频交互功能说明 ==========
-         * 1. 音乐文件: 请在项目根目录放置 'reveal.wav' 文件，或修改 new Audio('reveal.wav') 中的路径。
-         *    支持格式: .mp3, .wav, .ogg 等。
-         * 2. 按钮行为:
-         *    - “超级用户权限已开放” 显示后，会出现 “▶ 点击以继续>” 按钮。
-         *    - 首次点击按钮会播放背景音乐（循环），按钮变为 “⏸ 暂停音乐”。
-         *    - 再次点击可暂停/继续播放，实现交互开关。
-         * 3. 音乐循环: bgAudio.loop = true 已设置，音乐将持续循环。
-         * 4. 重置行为: 点击菱形Logo会重置整个验证流程，同时停止音乐并移除按钮；流程重新开始后按钮会再次出现。
-         * 5. 浏览器策略: 由于现代浏览器要求用户交互才能播放音频，此按钮提供了明确的用户激活入口。
-         *    无需额外处理自动播放策略，完全符合规范。
-         * 6. 如需更换音乐或调整音量，请修改 initAudio() 函数中的路径和 volume 属性。
-         */
+        console.log("[PRTS] 权限认证终端 | 黑暗主题/文字需点击按钮后激活 | 音乐交互集成");
     })();
 </script>
 </body>
