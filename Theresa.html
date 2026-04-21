@@ -495,11 +495,11 @@
                 // 1. 处理音乐播放/暂停
                 if (!isPlaying) {
                     audio.play().then(() => {
-                        btn.innerHTML = '⏸ 暂停音乐';
+                        btn.innerHTML = '▶ 暂停音乐';
                         btn.setAttribute('data-playing', 'true');
                     }).catch(err => {
                         console.warn('播放被阻止:', err);
-                        btn.innerHTML = '🔇 点击重试';
+                        btn.innerHTML = '▶ 点击重试';
                         setTimeout(() => {
                             if (btn.getAttribute('data-playing') !== 'true') {
                                 btn.innerHTML = '▶ 点击以继续>';
