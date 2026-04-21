@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>PRTS 超级权限验证 | 内部系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #f5f7fc;
+            font-family: 'Inter', 'SF Mono', 'Fira Code', 'Segoe UI', monospace;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow-x: hidden;
+            transition: background-color 0.6s ease, color 0.3s ease;
+        }
+
+        body.dark-mode {
+            background-color: #0a0c10 !important;
+        }
+
+        body.dark-mode .bg-mecha,
+        body.dark-mode .diagonal-line {
+            opacity: 0.2;
+        }
+
+        body.dark-mode .auth-card {
+            background: rgba(8, 10, 18, 0.94);
+            border-color: #2a2e3f;
+            box-shadow: 0 0 0 1px rgba(255, 134, 156, 0.2), 12px 12px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        body.dark-mode .ascii-bar,
+        body.dark-mode .status-footer,
+        body.dark-mode .log-line,
+        body.dark-mode .loader-ascii,
+        body.dark-mode .loader-ascii .spin {
+            color: #ff869c !important;
+            border-bottom-color: #ff869c33;
+        }
+
+        body.dark-mode .log-line.visible {
+            border-left-color: #ff869c;
+        }
+
+        body.dark-mode .status-footer {
+            border-top-color: #ff869c33;
+        }
+
+        body.dark-mode .cursor-blink {
+            background-color: #ff869c;
+        }
+
+        body.dark-mode .ascii-bar span:first-child::before {
+            color: #ff869c;
+        }
+
+        .question-revelation {
+            margin-top: 1.5rem;
+            padding: 1rem 0 0.5rem 12px;
+            font-family: 'Fira Code', 'SF Mono', monospace;
+            font-size: clamp(0.95rem, 4vw, 1.35rem);
+            line-height: 1.7;
+            color: #ff869c;
+            border-top: 1px dashed #ff869c66;
+            letter-spacing: -0.2px;
+            white-space: pre-line;
+            word-break: break-word;
+        }
+
+        .question-revelation div {
+            margin-bottom: 0.5rem;
+            opacity: 0;
+            transform: translateY(6px);
+            animation: fadeInUp 0.45s cubic-bezier(0.2, 0.9, 0.4, 1.1) forwards;
+        }
+
+        .question-revelation div:nth-child(1) { animation-delay: 0.05s; }
+        .question-revelation div:nth-child(2) { animation-delay: 0.2s; }
+        .question-revelation div:nth-child(3) { animation-delay: 0.35s; }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .bg-mecha {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image:
+                repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 1px, transparent 1px, transparent 28px),
+                repeating-linear-gradient(90deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 1px, transparent 1px, transparent 28px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .diagonal-line {
+            position: fixed;
+            top: -30%;
+            right: -10%;
+            width: 60%;
+            height: 180%;
+            background: repeating-linear-gradient(45deg, rgba(0,0,0,0.02) 0px, rgba(0,0,0,0.02) 2px, transparent 2px, transparent 12px);
+            transform: rotate(25deg);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .auth-card {
+            position: relative;
+            z-index: 2;
+            width: 90%;
+            max-width: 780px;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(0px);
+            border: 1px solid #1e2a3a;
+            box-shadow: 12px 12px 0 rgba(0, 0, 0, 0.04);
+            padding: 2rem 2rem 2.5rem;
+            transition: background 0.4s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .terminal-window {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .ascii-bar {
+            font-family: monospace;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            color: #2c3e44;
+            border-bottom: 1px solid #1e2a3a;
+            padding-bottom: 0.6rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            transition: color 0.2s, border-color 0.2s;
+        }
+
+        .ascii-bar span:first-child::before {
+            content: ">";
+            margin-right: 6px;
+            font-weight: bold;
+        }
+
+        .log-area {
+            min-height: 240px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 1rem;
+            font-family: 'Fira Code', 'SF Mono', monospace;
+        }
+
+        .log-line {
+            font-size: clamp(1rem, 4.5vw, 1.6rem);
+            font-weight: 450;
+            color: #1a2c33;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.1), transform 0.3s ease, color 0.2s, border-left-color 0.2s;
+            letter-spacing: -0.2px;
+            border-left: 2px solid transparent;
+            padding-left: 12px;
+        }
+
+        .log-line.visible {
+            opacity: 1;
+            transform: translateY(0);
+            border-left-color: #1e2a3a;
+        }
+
+        .loader-ascii {
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-family: monospace;
+            font-size: 1.3rem;
+            font-weight: 500;
+            color: #2c5a6e;
+            transition: color 0.2s;
+        }
+        .loader-ascii .spin {
+            display: inline-block;
+            width: 1.6rem;
+            text-align: center;
+            animation: asciiSpin 0.9s steps(4) infinite;
+            font-weight: bold;
+        }
+        @keyframes asciiSpin {
+            0% { content: "|"; opacity: 0.6; }
+            25% { content: "/"; opacity: 0.8; }
+            50% { content: "-"; opacity: 1; }
+            75% { content: "\\"; opacity: 0.8; }
+            100% { content: "|"; opacity: 0.6; }
+        }
+
+        .status-footer {
+            margin-top: 2rem;
+            border-top: 1px solid #d4dee4;
+            padding-top: 1rem;
+            font-size: 0.7rem;
+            font-family: monospace;
+            color: #5c6f7e;
+            display: flex;
+            justify-content: space-between;
+            transition: color 0.2s, border-color 0.2s;
+        }
+
+        /* 音频控制按钮样式 */
+        .audio-control-btn {
+            margin-top: 0.8rem;
+            background: transparent;
+            border: 1px solid #1e2a3a;
+            padding: 0.5rem 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #1e2a3a;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 2px;
+            letter-spacing: 0.5px;
+            width: fit-content;
+        }
+
+        .audio-control-btn:hover {
+            background: #1e2a3a10;
+            border-color: #2c5a6e;
+        }
+
+        body.dark-mode .audio-control-btn {
+            border-color: #ff869c;
+            color: #ff869c;
+        }
+
+        body.dark-mode .audio-control-btn:hover {
+            background: #ff869c20;
+            border-color: #ff869c;
+        }
+
+        .diamond-logo {
+            position: fixed;
+            top: 2rem;
+            left: 2rem;
+            width: clamp(100px, 13vw, 150px);
+            height: clamp(100px, 13vw, 150px);
+            z-index: 15;
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+        .diamond-logo canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.05));
+        }
+
+        @media (max-width: 640px) {
+            .auth-card {
+                padding: 1.2rem;
+                width: 92%;
+            }
+            .diamond-logo {
+                top: 1rem;
+                left: 1rem;
+                width: 70px;
+                height: 70px;
+            }
+            .log-line {
+                font-size: 0.9rem;
+                padding-left: 6px;
+            }
+            .audio-control-btn {
+                font-size: 0.75rem;
+                padding: 0.35rem 0.8rem;
+            }
+        }
+
+        .cursor-blink {
+            display: inline-block;
+            width: 8px;
+            height: 1rem;
+            background-color: #1e2a3a;
+            vertical-align: middle;
+            margin-left: 4px;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="bg-mecha"></div>
+<div class="diagonal-line"></div>
+
+<div class="diamond-logo">
+    <canvas id="prismCanvas" width="300" height="450" style="width:100%; height:100%; display:block;"></canvas>
+</div>
+
+<div class="auth-card">
+    <div class="terminal-window">
+        <div class="ascii-bar">
+            <span>PRTS::AUTH_AGENT_v2.6</span>
+            <span>SECURE TERMINAL</span>
+        </div>
+
+        <div class="log-area" id="logArea">
+            <div id="msg0" class="log-line" style="opacity: 0;">检测到用户登入</div>
+            <div id="msg1" class="log-line" style="opacity: 0;">身份认证：No.??? Null</div>
+            <div id="msg2" class="log-line" style="opacity: 0;">欢迎登入系统，“Null”。</div>
+            <div id="loaderContainer" class="loader-ascii" style="opacity: 0; transition: opacity 0.2s;">
+                <span>⟡ 授权载荷</span>
+                <span class="spin">\</span>
+                <span>验证中</span>
+            </div>
+            <div id="msg3" class="log-line" style="opacity: 0;">未检测到用户权限组</div>
+            <div id="msg4" class="log-line" style="opacity: 0;">超级用户权限已开放</div>
+        </div>
+
+        <div class="status-footer">
+            <span>[ SYSTEM_INTEGRITY: OK ]</span>
+            <span>✦ PRTS i/o system v1.0.1 ✦</span>
+            <span class="cursor-blink" style="margin-left: 8px;"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        // ---------- 菱形点阵图形绘制 (保留原始动画及素材) ----------
+        const canvas = document.getElementById('prismCanvas');
+        const ctx = canvas.getContext('2d');
+        let dim = 300;
+        canvas.width = dim;
+        canvas.height = dim * 1.5;
+
+        const centerX = dim / 2;
+        const centerY = dim / 2;
+        const verticalTop = centerY - dim * 0.44;
+        const verticalBottom = centerY + dim * 0.44;
+        const leftWing = centerX - dim * 0.26;
+        const rightWing = centerX + dim * 0.26;
+
+        const midTopRight = { x: (centerX + rightWing) / 2, y: (verticalTop + centerY) / 2 };
+        const midRightBottom = { x: (rightWing + centerX) / 2, y: (centerY + verticalBottom) / 2 };
+        const midBottomLeft = { x: (centerX + leftWing) / 2, y: (verticalBottom + centerY) / 2 };
+        const midLeftTop = { x: (leftWing + centerX) / 2, y: (centerY + verticalTop) / 2 };
+
+        const letters = [
+            { pos: midLeftTop, char: 'P' },
+            { pos: midTopRight, char: 'R' },
+            { pos: midBottomLeft, char: 'T' },
+            { pos: midRightBottom, char: 'S' }
+        ];
+
+        const edgeLen = Math.hypot(midTopRight.x - centerX, midTopRight.y - verticalTop);
+        const baseFontSize = Math.max(28, Math.min(64, edgeLen * 0.92));
+
+        function drawDiamondWithLetters(now) {
+            if (!ctx) return;
+            ctx.clearRect(0, 0, dim, dim);
+
+            ctx.beginPath();
+            ctx.moveTo(centerX, verticalTop);
+            ctx.lineTo(rightWing, centerY);
+            ctx.lineTo(centerX, verticalBottom);
+            ctx.lineTo(leftWing, centerY);
+            ctx.closePath();
+            ctx.strokeStyle = '#1e2f3c';
+            ctx.lineWidth = 17;
+            ctx.setLineDash([]);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(centerX, verticalTop);
+            ctx.lineTo(rightWing, centerY);
+            ctx.lineTo(centerX, verticalBottom);
+            ctx.lineTo(leftWing, centerY);
+            ctx.closePath();
+            ctx.strokeStyle = '#6c8b9b';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 6]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            const t = now / 520;
+            for (let i = 0; i < letters.length; i++) {
+                const item = letters[i];
+                const baseX = item.pos.x;
+                const baseY = item.pos.y;
+                const dx = centerX - baseX;
+                const dy = centerY - baseY;
+                const len = Math.hypot(dx, dy);
+                if (len < 0.01) continue;
+                const normX = dx / len;
+                const normY = dy / len;
+                const amplitude = 5.2 * (0.6 + 0.4 * Math.sin(t * 2.2 + i * 1.8));
+                const offX = normX * amplitude;
+                const offY = normY * amplitude;
+                const drawX = baseX + offX;
+                const drawY = baseY + offY;
+
+                let dynamicFont = baseFontSize * 1.1;
+                ctx.font = `bold ${Math.floor(dynamicFont)}px "Fira Code", "JetBrains Mono", "Segoe UI", monospace`;
+                ctx.fillStyle = '#FFFFFF';
+                ctx.shadowBlur = 0;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(item.char, drawX, drawY);
+
+                ctx.beginPath();
+                ctx.arc(drawX - 2, drawY - 2, 1.15, 0, Math.PI * 2);
+                ctx.fillStyle = '#4f7a92';
+                ctx.fill();
+            }
+        }
+
+        function animateCanvas(time) {
+            drawDiamondWithLetters(time);
+            requestAnimationFrame(animateCanvas);
+        }
+        requestAnimationFrame(animateCanvas);
+
+        // ---------- 文字动画 + 黑暗主题扩展 + 音频控制按钮 ----------
+        const msg0 = document.getElementById('msg0');
+        const msg1 = document.getElementById('msg1');
+        const msg2 = document.getElementById('msg2');
+        const msg3 = document.getElementById('msg3');
+        const msg4 = document.getElementById('msg4');
+        const loaderContainer = document.getElementById('loaderContainer');
+        const allMsgs = [msg0, msg1, msg2, msg3, msg4];
+        
+        let darkModeActive = false;
+        let darkModeTimer = null;
+        let extraQuestionDiv = null;
+        let resetInProgress = false;
+        let audioControlBtn = null;      // 音频按钮元素
+        let bgAudio = null;              // 音频实例
+        let isAudioInitialized = false;  // 是否已经创建音频对象
+        
+        // 创建音频实例（不自动播放）
+        function initAudio() {
+            if (bgAudio) return bgAudio;
+            try {
+                // 请确保 reveal.wav 文件存在于同目录下，可替换为实际音乐文件路径
+                bgAudio = new Audio('m_avg_desolate_loop.mp3');
+                bgAudio.loop = true;      // 循环播放
+                bgAudio.volume = 0.5;
+                // 监听播放错误
+                bgAudio.addEventListener('error', (e) => {
+                    console.warn('音频文件加载失败，请检查路径或文件格式。', e);
+                });
+                return bgAudio;
+            } catch (err) {
+                console.error('创建音频对象失败:', err);
+                return null;
+            }
+        }
+        
+        // 创建交互按钮 (位于log-area区域内，在msg4之后)
+        function createAudioButton() {
+            if (audioControlBtn) return audioControlBtn;
+            const btn = document.createElement('button');
+            btn.className = 'audio-control-btn';
+            btn.innerHTML = '▶ 点击以继续>';
+            btn.setAttribute('data-playing', 'false');
+            
+            // 点击行为：激活音频并支持暂停/播放切换
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const audio = initAudio();
+                if (!audio) {
+                    btn.innerHTML = '⚠ 音频不可用';
+                    return;
+                }
+                const isPlaying = btn.getAttribute('data-playing') === 'true';
+                if (!isPlaying) {
+                    // 尝试播放
+                    audio.play().then(() => {
+                        btn.innerHTML = '⏸ 暂停音乐';
+                        btn.setAttribute('data-playing', 'true');
+                    }).catch(err => {
+                        console.warn('播放被阻止，请确保用户交互有效:', err);
+                        btn.innerHTML = '🔇 点击重试';
+                        // 短暂恢复文字提示
+                        setTimeout(() => {
+                            if (btn.getAttribute('data-playing') !== 'true') {
+                                btn.innerHTML = '▶ 点击以继续>';
+                            }
+                        }, 1200);
+                    });
+                } else {
+                    // 暂停
+                    audio.pause();
+                    btn.innerHTML = '▶ 继续音乐';
+                    btn.setAttribute('data-playing', 'false');
+                }
+            });
+            
+            audioControlBtn = btn;
+            return btn;
+        }
+        
+        // 将按钮添加到终端区域 (放在log-area末尾，status-footer之前)
+        function attachAudioButton() {
+            if (!audioControlBtn || audioControlBtn.parentNode) return;
+            const logArea = document.getElementById('logArea');
+            // 为了避免破坏现有布局，插入到log-area内部最后，但位于question-revelation之前（如果存在）
+            // 更好方式：追加在logArea末尾
+            logArea.appendChild(audioControlBtn);
+        }
+        
+        // 移除音频按钮（重置时）
+        function removeAudioButton() {
+            if (audioControlBtn && audioControlBtn.parentNode) {
+                audioControlBtn.remove();
+            }
+            // 不销毁audio对象，但停止播放
+            if (bgAudio) {
+                bgAudio.pause();
+                bgAudio.currentTime = 0;
+            }
+            if (audioControlBtn) {
+                audioControlBtn.setAttribute('data-playing', 'false');
+                audioControlBtn.innerHTML = '▶ 点击以继续>';
+            }
+        }
+        
+        function clearTimeouts() {
+            activeTimeouts.forEach(t => clearTimeout(t));
+            activeTimeouts.length = 0;
+            if (darkModeTimer) {
+                clearTimeout(darkModeTimer);
+                darkModeTimer = null;
+            }
+        }
+        
+        function revertDarkTheme() {
+            if (extraQuestionDiv && extraQuestionDiv.parentNode) {
+                extraQuestionDiv.remove();
+                extraQuestionDiv = null;
+            }
+            document.body.classList.remove('dark-mode');
+            darkModeActive = false;
+            if (darkModeTimer) {
+                clearTimeout(darkModeTimer);
+                darkModeTimer = null;
+            }
+        }
+        
+        // 黑暗主题转变 (不自动播放音乐，仅视觉效果和文字)
+        function turnToDarkTheme() {
+            if (darkModeActive || resetInProgress) return;
+            darkModeActive = true;
+            
+            document.body.classList.add('dark-mode');
+            
+            if (extraQuestionDiv) extraQuestionDiv.remove();
+            extraQuestionDiv = document.createElement('div');
+            extraQuestionDiv.className = 'question-revelation';
+            const lines = [
+                "我只有一个问题。",
+                "在这些未来，以及更遥远的未来之中......",
+                "还有我爱的人的影子吗？"
+            ];
+            lines.forEach(line => {
+                const lineDiv = document.createElement('div');
+                lineDiv.textContent = line;
+                extraQuestionDiv.appendChild(lineDiv);
+            });
+            const logArea = document.getElementById('logArea');
+            // 确保按钮在文本之前或之后？ 为了美观，将问题文本置于按钮上方，但按钮已在logArea中，所以需要调整顺序
+            // 如果按钮存在，则将其移动到问题文本之后
+            if (audioControlBtn && audioControlBtn.parentNode === logArea) {
+                // 先移除再添加以保证顺序：文本在上，按钮在下
+                logArea.removeChild(audioControlBtn);
+                logArea.appendChild(extraQuestionDiv);
+                logArea.appendChild(audioControlBtn);
+            } else {
+                logArea.appendChild(extraQuestionDiv);
+            }
+        }
+        
+        let activeTimeouts = [];
+        
+        function fullResetAndRestart() {
+            resetInProgress = true;
+            clearTimeouts();
+            revertDarkTheme();
+            // 移除按钮并停止音乐
+            removeAudioButton();
+            // 重置音频对象，以便重新开始（保留对象但停止）
+            if (bgAudio) {
+                bgAudio.pause();
+                bgAudio.currentTime = 0;
+                // 不清空，后续重新点击按钮会再次play
+            }
+            allMsgs.forEach(m => {
+                m.classList.remove('visible');
+                m.style.opacity = '0';
+            });
+            loaderContainer.style.opacity = '0';
+            if (extraQuestionDiv && extraQuestionDiv.parentNode) extraQuestionDiv.remove();
+            extraQuestionDiv = null;
+            darkModeActive = false;
+            resetInProgress = false;
+            startAuthFlow();
+        }
+        
+        function startAuthFlow() {
+            clearTimeouts();
+            darkModeActive = false;
+            if (extraQuestionDiv && extraQuestionDiv.parentNode) extraQuestionDiv.remove();
+            extraQuestionDiv = null;
+            document.body.classList.remove('dark-mode');
+            
+            allMsgs.forEach(m => {
+                m.classList.remove('visible');
+                m.style.opacity = '0';
+            });
+            loaderContainer.style.opacity = '0';
+            
+            msg0.classList.add('visible');
+            msg0.style.opacity = '1';
+            
+            activeTimeouts.push(setTimeout(() => {
+                msg0.classList.remove('visible');
+                msg0.style.opacity = '0';
+                msg1.classList.add('visible');
+                msg1.style.opacity = '1';
+                
+                activeTimeouts.push(setTimeout(() => {
+                    msg1.classList.remove('visible');
+                    msg1.style.opacity = '0';
+                    msg2.classList.add('visible');
+                    msg2.style.opacity = '1';
+                    
+                    activeTimeouts.push(setTimeout(() => {
+                        msg2.classList.remove('visible');
+                        msg2.style.opacity = '0';
+                        loaderContainer.style.opacity = '1';
+                        
+                        activeTimeouts.push(setTimeout(() => {
+                            loaderContainer.style.opacity = '0';
+                            msg3.classList.add('visible');
+                            msg3.style.opacity = '1';
+                            
+                            activeTimeouts.push(setTimeout(() => {
+                                msg3.classList.remove('visible');
+                                msg3.style.opacity = '0';
+                                msg4.classList.add('visible');
+                                msg4.style.opacity = '1';
+                                
+                                // 超级用户权限已开放显示后，立即创建并附加音频按钮
+                                const btn = createAudioButton();
+                                attachAudioButton();
+                                
+                                // 2秒后触发黑暗主题转变
+                                darkModeTimer = setTimeout(() => {
+                                    if (!darkModeActive && !resetInProgress) {
+                                        turnToDarkTheme();
+                                    }
+                                    darkModeTimer = null;
+                                }, 2000);
+                                activeTimeouts.push(darkModeTimer);
+                                
+                            }, 2800));
+                        }, 2000));
+                    }, 1900));
+                }, 1600));
+            }, 2600));
+        }
+        
+        const spinSpan = document.querySelector('.spin');
+        if (spinSpan) {
+            const spinChars = ['|', '/', '-', '\\'];
+            let idx = 0;
+            setInterval(() => {
+                if (loaderContainer.style.opacity === '1') {
+                    spinSpan.innerText = spinChars[idx % 4];
+                    idx++;
+                }
+            }, 140);
+        }
+        
+        startAuthFlow();
+        
+        const diamondArea = document.querySelector('.diamond-logo');
+        diamondArea.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fullResetAndRestart();
+        });
+        
+        console.log("[PRTS] 权限认证终端已启动 | 音频控制按钮已集成 | 点击按钮激活循环音乐");
+        
+        /**
+         * ========== 音频交互功能说明 ==========
+         * 1. 音乐文件: 请在项目根目录放置 'reveal.wav' 文件，或修改 new Audio('reveal.wav') 中的路径。
+         *    支持格式: .mp3, .wav, .ogg 等。
+         * 2. 按钮行为:
+         *    - “超级用户权限已开放” 显示后，会出现 “▶ 点击以继续>” 按钮。
+         *    - 首次点击按钮会播放背景音乐（循环），按钮变为 “⏸ 暂停音乐”。
+         *    - 再次点击可暂停/继续播放，实现交互开关。
+         * 3. 音乐循环: bgAudio.loop = true 已设置，音乐将持续循环。
+         * 4. 重置行为: 点击菱形Logo会重置整个验证流程，同时停止音乐并移除按钮；流程重新开始后按钮会再次出现。
+         * 5. 浏览器策略: 由于现代浏览器要求用户交互才能播放音频，此按钮提供了明确的用户激活入口。
+         *    无需额外处理自动播放策略，完全符合规范。
+         * 6. 如需更换音乐或调整音量，请修改 initAudio() 函数中的路径和 volume 属性。
+         */
+    })();
+</script>
+</body>
+</html>
